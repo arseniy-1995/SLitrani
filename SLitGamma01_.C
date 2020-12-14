@@ -46,7 +46,9 @@ gROOT->ProcessLine(".x InitSLitrani.C(5,name,listing,upcom,downcom,kFALSE,kTRUE,
 // user manual. Method TLitGamma::MoveCradle() do the trick.
 //
 
-const Int_t type_detector = 2;			 // если =1, то	4 SiPM на торцах, если =2, то 3 SiPM на торцах и другие размеры кристалла
+const Int_t type_detector = 1;			 // если =1, то	4 SiPM на торцах, если =2, то 3 SiPM на торцах и другие размеры кристалла, если =3, то модель куба с единичным SiPM на грани
+
+const Int_t type_refrec = 1;			 // если =1, то отражения + затухания, если =2, то только отражени, никаких затуханий нигде нет, если =3, то полное поглощение пленкой
 
 const char* comTL = "Beam cradle is a TGeoEltu";
 const Color_t  matVacuumColor = 0;
@@ -178,7 +180,20 @@ BC_422_mix->AddElement(C, 1.0);
 // BC_422_mix->AddElement(H, 10);
 // BC_422_mix->AddElement(C, 9);
 
-const Double_t Light_Attenuation_Length = 150.0; // см
+if (type_refrec == 1) {
+
+	const Double_t Light_Attenuation_Length = 150.0; // см
+}
+else if (type_refrec == 2) {
+
+	const Double_t Light_Attenuation_Length = 10000.0; // см
+}
+else if (type_refrec == 3) {
+
+	const Double_t Light_Attenuation_Length = 100000.0; // см
+}
+
+
 
 BC_422_mix->SetRadLen(-BC_422_radlen, BC_422_intlen);
 TLitMedium* BC_422 = new TLitMedium("BC_422", mediumindex++, BC_422_mix, kFALSE, 1.0, Light_Attenuation_Length);
@@ -197,8 +212,12 @@ BC_422->IsIsotropic(n_ref);                // показатель преломления константа
 
 BC_422->SetCascades(BC_422_rMoliere); //only useful when TLitCascade used
 
-BC_422->SetDiffusionLength(2000.0, kTRUE);
-BC_422->SetDiffusionLength(2000.0, kTRUE);
+if (type_refrec == 1) {
+
+	BC_422->SetDiffusionLength(2000.0, kTRUE);
+	BC_422->SetRayleighLength(2000.0, kTRUE);
+	
+}
 
 const Double_t decay_time_BC_422 = 1.6; // нс
 const Double_t rise_time_BC_422 = 0.35; // нс
@@ -245,19 +264,54 @@ BC_422->dEdx("DEdx_MusInPbWO4__000", 100.0, kTRUE);
 
 
 
- //
- // (3) Full pedantic definition of Silicium
- //
+//
+// (3) Full pedantic definition of Silicium
+//
 TGeoElement* Si = table->FindElement("SILICON");
 TGeoMaterial* silicium_mat = new TGeoMaterial("Silicium", Si, 2.33);
-TLitMedium* silicium = new TLitMedium("Silicium", mediumindex++, silicium_mat, kTRUE, 1.0, "AbsorptionLength_Silicium");
-silicium->IsIsotropic("RefrIndex_Silicium");
+
+if (type_refrec == 1) {
+	TLitMedium* silicium = new TLitMedium("Silicium", mediumindex++, silicium_mat, kTRUE, 1.0, "AbsorptionLength_Silicium");
+	silicium->IsIsotropic("RefrIndex_Silicium");
+}
+else if (type_refrec == 2) {
+
+	TLitMedium* silicium = new TLitMedium("Silicium", mediumindex++, silicium_mat, kTRUE, 1.0, 0.0000000001);
+	silicium->IsIsotropic("RefrIndex_Silicium");
+}
+else if (type_refrec == 3) {
+
+	TLitMedium* silicium = new TLitMedium("Silicium", mediumindex++, silicium_mat, kTRUE, 1.0, 0.0000000001);
+	silicium->IsIsotropic("RefrIndex_Silicium");
+}
+
+
+//silicium->IsIsotropic("RefrIndex_Silicium");
+
+
 //
 //  (4) Definition of medium "glue"
 //
 TGeoMaterial* glue_mat = new TGeoMaterial("Glue", IrrA, IrrZ, IrrRho);
-TLitMedium* glue = new TLitMedium("Glue", mediumindex++, glue_mat, kFALSE, 1.0, "AbsorptionLength_Meltmount1704");
+
+if (type_refrec == 1) {
+
+	TLitMedium* glue = new TLitMedium("Glue", mediumindex++, glue_mat, kFALSE, 1.0, "AbsorptionLength_Meltmount1704");
+
+}
+else if (type_refrec == 2) {
+
+	TLitMedium* glue = new TLitMedium("Glue", mediumindex++, glue_mat, kFALSE, 1.0, 1000.0);
+}
+else if (type_refrec == 3) {
+
+	TLitMedium* glue = new TLitMedium("Glue", mediumindex++, glue_mat, kFALSE, 1.0, 1000.0);
+}
+
+
 glue->IsIsotropic("RefrIndex_RTV3145");
+
+
 //
 //  (5) Definition of medium "Strontium" for the radioactive source. We define it as a
 //      TLitMedium, in order that Compton effect and Photo-electric effect be available
@@ -271,6 +325,8 @@ sr->IsIsotropic(index_strontium); //To avoid a warning in TLitMedium::NewWaveLen
 gROOT->ProcessLine(".L PhotoEl_Strontium.C"); //Found in directory FitMacros, not in SplineFitDB.rdb
 TSplineFit* fitPESr = PhotoEl_Strontium();
 sr->SetXSectnPE(fitPESr);
+
+
 //____________________________________________________________________________
 //
 // Wrappings			   // обертка APD
@@ -281,8 +337,32 @@ sr->SetXSectnPE(fitPESr);
 //
 TGeoMaterial* totabs_mat = new TGeoMaterial("TotAbsorbing", IrrA, IrrZ, IrrRho);
 TLitMedium* totabsorbing = new TLitMedium("TotAbsorbing", mediumindex++, totabs_mat, -1.0);
-totabsorbing->SetAsWrapping(0.0, 0.0, 1.0, 1.0, 1.0);
-totabsorbing->IsIsotropic(1.0);
+
+if (type_refrec == 1) {
+	totabsorbing->SetAsWrapping(0.0, 0.0, 1.0, 1.0, 1.0);
+	totabsorbing->IsIsotropic(1.0);
+}
+else if (type_refrec == 2) {
+
+	totabsorbing->SetAsWrapping(0.0, 0.0, 1.0, 1.0, 1.0);
+	totabsorbing->IsIsotropic(1.0);
+}
+else if (type_refrec == 3) {
+
+	totabsorbing->SetAsWrapping(0.0, 0.0, 1.0, 1.0, 1.0);
+	totabsorbing->IsIsotropic(1.0);
+}
+
+//
+// Definition of "TotReflecting": a totally reflecting wrapping
+//
+TGeoMaterial* totref_mat = new TGeoMaterial("Aluminium", IrrA, IrrZ, IrrRho);
+TLitMedium* totreflecting = new TLitMedium("TotReflecting", mediumindex++, totref_mat, -1.0);
+totreflecting->SetAsWrapping(0.0, 0.0, 0.9, 1.0, 0.0, 90.0);
+totreflecting->IsIsotropic(Air_RefrIndex);
+//
+
+
 //
 //  (7) Definition of wrapping medium aluminium
 //
@@ -291,16 +371,73 @@ totabsorbing->IsIsotropic(1.0);
 // fit is not [yet] inserted inside the SplineFitDB.rdb.
 //  Notice also this interesting feature that Compton effect and photo-electric effect will
 // be generated inside a wrapping, which was not possible in the old Litrani!
-const Double_t aluminium_diffus = 0.01;		   // доля которые рассеивются, а не отражаются
-const Double_t AluminiumSupplAbs = 0.1;		   // дополнительная абсорбция	   0.1
+
+if (type_refrec == 1) {
+	const Double_t aluminium_diffus = 0.01;		   // доля которые рассеивются, а не отражаются	   0.01
+	const Double_t AluminiumSupplAbs = 0.1;		   // дополнительная абсорбция	   0.1
+	const Double_t mu_air = 1.0;				   // если ==-1, то нет воздуха между оберткой и кристаллом, если ==1, то есть
+}
+else if (type_refrec == 2) {
+	const Double_t aluminium_diffus = 0.0;		   // доля которые рассеивются, а не отражаются
+	const Double_t AluminiumSupplAbs = 0.0;		   // дополнительная абсорбция	   0.1
+
+}
+else if (type_refrec == 3) {
+	const Double_t aluminium_diffus = 0.0;		   // доля которые рассеивются, а не отражаются
+	const Double_t AluminiumSupplAbs = 1.0;		   // дополнительная абсорбция	   0.1
+
+}
+
 TGeoElement* Al = table->FindElement("ALUMINIUM");
 TGeoMaterial* aluminium_mat = new TGeoMaterial("Aluminium", Al, 2.6995);
-TLitMedium* aluminium = new TLitMedium("Aluminium", mediumindex++, aluminium_mat, 1.0);
-aluminium->SetAsWrapping(aluminium_diffus, "RIndexRev_Aluminium", "IIndexRev_Aluminium", 1.0, AluminiumSupplAbs);
-aluminium->IsIsotropic(Air_RefrIndex);
-gROOT->ProcessLine(".L PhotoEl_Aluminium.C");
-TSplineFit* fitPEAlu = PhotoEl_Aluminium();
-aluminium->SetXSectnPE(fitPEAlu);
+//TLitMedium* aluminium = new TLitMedium("Aluminium", mediumindex++, aluminium_mat, 1.0);
+if (type_refrec == 1) {
+	TLitMedium* aluminium = new TLitMedium("Aluminium", mediumindex++, aluminium_mat, mu_air);
+	aluminium->SetAsWrapping(aluminium_diffus, "RIndexRev_Aluminium", "IIndexRev_Aluminium", 1.0, AluminiumSupplAbs);
+	aluminium->IsIsotropic(Air_RefrIndex);
+	gROOT->ProcessLine(".L PhotoEl_Aluminium.C");
+	TSplineFit* fitPEAlu = PhotoEl_Aluminium();
+	aluminium->SetXSectnPE(fitPEAlu);
+
+}
+else if (type_refrec == 2) {
+
+	const Double_t n_Re = 0.0000000001;			  //0.9
+	const Double_t n_Im = 0.0;			  // 1.0
+	TLitMedium* aluminium = new TLitMedium("Aluminium", mediumindex++, aluminium_mat, -1.0);
+	aluminium->SetAsWrapping(aluminium_diffus, n_Re, n_Im, 1.0, AluminiumSupplAbs, 90.0);
+	aluminium->IsIsotropic(Air_RefrIndex);
+}
+else if (type_refrec == 3) {
+
+	TLitMedium* aluminium = new TLitMedium("Aluminium", mediumindex++, aluminium_mat, -1.0);
+	aluminium->SetAsWrapping(aluminium_diffus, "RIndexRev_Aluminium", "IIndexRev_Aluminium", 1.0, AluminiumSupplAbs);
+	aluminium->IsIsotropic(Air_RefrIndex);
+//	gROOT->ProcessLine(".L PhotoEl_Aluminium.C");
+//	TSplineFit* fitPEAlu = PhotoEl_Aluminium();
+//	aluminium->SetXSectnPE(fitPEAlu);
+}
+
+
+//aluminium->IsIsotropic(Air_RefrIndex);
+//gROOT->ProcessLine(".L PhotoEl_Aluminium.C");
+//TSplineFit* fitPEAlu = PhotoEl_Aluminium();
+//aluminium->SetXSectnPE(fitPEAlu);
+
+
+//
+  // Definition of wrapping medium millipore
+  //
+const Double_t millipore_diffus = 0.5;
+const Double_t milliporeSupplAbs = 0.0;  /*0.04*/
+const Double_t RIndexRev_millipore = 0.1;
+const Double_t IIndexRev_millipore = 0.1;
+TGeoMaterial* millipore_mat = new TGeoMaterial("Millipore", IrrA, IrrZ, IrrRho);
+TLitMedium* millipore = new TLitMedium("Millipore", mediumindex++, millipore_mat, -1.0);
+millipore->SetAsWrapping(millipore_diffus, "RIndexRev_Tyvek", "IIndexRev_Tyvek", 1.0, milliporeSupplAbs);
+millipore->IsIsotropic(Air_RefrIndex);
+
+
 //____________________________________________________________________________
 //
 // Dimensions
@@ -312,16 +449,28 @@ aluminium->SetXSectnPE(fitPEAlu);
 
 if (type_detector == 1) {
 
-const Double_t crys_dx = 4.0 / 2.0;		   //in cm
-const Double_t crys_dy = 0.65 / 2.0;
-const Double_t crys_dz = 18.0 / 2.0;
+	const Double_t crys_dx = 4.0 / 2.0;		   //in cm
+	const Double_t crys_dy = 0.65 / 2.0;
+	const Double_t crys_dz = 18.0 / 2.0;
+
+//	const Double_t crys_dx = 3.0 / 2.0;
+//	const Double_t crys_dy = 0.5 / 2.0;
+//	const Double_t crys_dz = 6.0 / 2.0;
+
 
 }
 else if (type_detector == 2) {
 
-const Double_t crys_dx = 3.0 / 2.0;
-const Double_t crys_dy = 0.5 / 2.0;
-const Double_t crys_dz = 6.0 / 2.0;
+	const Double_t crys_dx = 3.0 / 2.0;
+	const Double_t crys_dy = 0.5 / 2.0;
+	const Double_t crys_dz = 6.0 / 2.0;
+
+}
+else if (type_detector == 3) {
+
+	const Double_t crys_dx = 5.0 / 2.0;
+	const Double_t crys_dy = 5.0 / 2.0;
+	const Double_t crys_dz = 5.0 / 2.0;
 
 }
 
@@ -358,22 +507,62 @@ Int_t nrun = (Int_t)arun;
 // Dimensions of APD
 //
 
+if (type_detector == 1 || type_detector == 2) {
+	const Double_t apd_dx = 0.3 / 2.0;
+	const Double_t apd_dy = 0.3 / 2.0;
+	const Double_t apd_dz = 0.145 / 2.0;		// всего SiPM
+	//const Double_t apd_dz = 0.03 / 2.0;			// фоточувствительной области
+}
+else if (type_detector == 3) {
+	const Double_t apd_dx = 5.0 / 2.0;
+	const Double_t apd_dy = 5.0 / 2.0;
+	const Double_t apd_dz = 0.145 / 2.0;		// всего SiPM
+	//const Double_t apd_dz = 0.03 / 2.0;			// фоточувствительной области
+}
 
-const Double_t apd_dx = 0.3 / 2.0;
-const Double_t apd_dy = 0.3 / 2.0;
-const Double_t apd_dz = 0.145 / 2.0;
+
 //
 // Dimensions for glue of APD
 //
 const Double_t glueapd_dx = apd_dx;
 const Double_t glueapd_dy = apd_dy;
-const Double_t glueapd_dz = 0.05;
+
+if (type_refrec == 1) {
+
+	const Double_t glueapd_dz = 0.001;	  //0,001== 10 мкм
+
+}
+else if (type_refrec == 2) {
+
+	const Double_t glueapd_dz = 0.0000000001;
+
+}
+else if (type_refrec == 3) {
+
+	const Double_t glueapd_dz = 0.000000001;
+
+}
 //
 // Width of wrapping is wid
 //
-const Double_t wid = 0.1;
-Double_t ws2 = 0.5 * wid;
 
+if (type_refrec == 1) {
+	const Double_t wid = 0.005;	 //0,05 мм=0,005 у нас, было по умолчания 0,1
+	Double_t ws2 = 0.1 * wid;
+
+}
+else if (type_refrec == 2) {
+
+	const Double_t wid = 0.000001;	 //0,03 мм=0,003 у нас, было по умолчания 0,1
+	Double_t ws2 = 0.1 * wid;
+
+}
+else if (type_refrec == 3) {
+
+	const Double_t wid = 0.000001;	 //0,03 мм=0,003 у нас, было по умолчания 0,1
+	Double_t ws2 = 0.1 * wid;
+
+}
 
 
 
@@ -410,14 +599,14 @@ Double_t posy = starty;
 //
 // Dimensions of TGEOBBox of alu around APD and glue of APD [partially] "APDWS"
 //
-Double_t alua_dx = apd_dx + wid;
-Double_t alua_dy = apd_dy + wid;
+Double_t alua_dx = apd_dx + 1.0 * wid;
+Double_t alua_dy = apd_dy + 1.0 * wid;
 Double_t alua_dz = apd_dz + glueapd_dz;
 //
 // Dimensions of TotAbsorbing wrapping around APD and glue of APD
 //
-Double_t tot_dx = apd_dx + wid;
-Double_t tot_dy = apd_dy + wid;
+Double_t tot_dx = apd_dx + 1.0 * wid;
+Double_t tot_dy = apd_dy + 1.0 * wid;
 Double_t tot_dz = apd_dz + glueapd_dz + ws2;
 //
 // Dimensions of TOP
@@ -470,31 +659,42 @@ if (type_detector == 1) {
 	TGeoTranslation* t1_8 = new TGeoTranslation("t1_8", APD_z_1, 0.0, -t_alua_crys_z);
 	t1_8->RegisterYourself();
 
-}else if (type_detector == 2) {
+}
+else if (type_detector == 2) {
 
 
- TGeoTranslation* t1_1 = new TGeoTranslation("t1_1", -APD_z_3, 0.0, t_alua_crys_z);
-t1_1->RegisterYourself();
+	TGeoTranslation* t1_1 = new TGeoTranslation("t1_1", -APD_z_3, 0.0, t_alua_crys_z);
+	t1_1->RegisterYourself();
 
-TGeoTranslation* t1_2 = new TGeoTranslation("t1_2", 0.0, 0.0, t_alua_crys_z);
-t1_2->RegisterYourself();
+	TGeoTranslation* t1_2 = new TGeoTranslation("t1_2", 0.0, 0.0, t_alua_crys_z);
+	t1_2->RegisterYourself();
 
-TGeoTranslation* t1_3 = new TGeoTranslation("t1_3", APD_z_3, 0.0, t_alua_crys_z);
-t1_3->RegisterYourself();
-
-
+	TGeoTranslation* t1_3 = new TGeoTranslation("t1_3", APD_z_3, 0.0, t_alua_crys_z);
+	t1_3->RegisterYourself();
 
 
-TGeoTranslation* t1_4 = new TGeoTranslation("t1_4", -APD_z_3, 0.0, -t_alua_crys_z);
-t1_4->RegisterYourself();
 
-TGeoTranslation* t1_5 = new TGeoTranslation("t1_5", 0.0, 0.0, -t_alua_crys_z);
-t1_5->RegisterYourself();
 
-TGeoTranslation* t1_6 = new TGeoTranslation("t1_6", APD_z_3, 0.0, -t_alua_crys_z);
-t1_6->RegisterYourself();
+	TGeoTranslation* t1_4 = new TGeoTranslation("t1_4", -APD_z_3, 0.0, -t_alua_crys_z);
+	t1_4->RegisterYourself();
 
- }
+	TGeoTranslation* t1_5 = new TGeoTranslation("t1_5", 0.0, 0.0, -t_alua_crys_z);
+	t1_5->RegisterYourself();
+
+	TGeoTranslation* t1_6 = new TGeoTranslation("t1_6", APD_z_3, 0.0, -t_alua_crys_z);
+	t1_6->RegisterYourself();
+
+}
+else if (type_detector == 3) {
+
+
+	TGeoTranslation* t1_1 = new TGeoTranslation("t1_1", 0.0, 0.0, t_alua_crys_z);
+	t1_1->RegisterYourself();
+
+
+
+}
+
 
 
 
@@ -533,6 +733,13 @@ else if (type_detector == 2) {
 	TGeoTranslation* t3_6 = new TGeoTranslation("t3_6", APD_z_3, 0.0, -t_tot_crys_z);
 
 }
+else if (type_detector == 3) {
+
+
+	TGeoTranslation* t3_1 = new TGeoTranslation("t3_1", 0.0, 0.0, t_tot_crys_z);
+
+
+}
 
 
 
@@ -569,6 +776,13 @@ else if (type_detector == 2) {
 	TGeoTranslation* t4_6 = new TGeoTranslation("t4_6", 0.0, 0.0, -t_apd_tot_z);
 
 }
+else if (type_detector == 3) {
+
+
+	TGeoTranslation* t4_1 = new TGeoTranslation("t4_1", 0.0, 0.0, t_apd_tot_z);
+
+}
+
 
 
 //  t5 is for positionning TGeoBBox of glue of the APD inside the TGeoBBox of "totabsorbing"
@@ -600,6 +814,13 @@ else if (type_detector == 2) {
 	TGeoTranslation* t5_4 = new TGeoTranslation("t5_4", 0.0, 0.0, -t_glueapd_tot_z);
 	TGeoTranslation* t5_5 = new TGeoTranslation("t5_5", 0.0, 0.0, -t_glueapd_tot_z);
 	TGeoTranslation* t5_6 = new TGeoTranslation("t5_6", 0.0, 0.0, -t_glueapd_tot_z);
+
+}
+else if (type_detector == 3) {
+
+
+	TGeoTranslation* t5_1 = new TGeoTranslation("t5_1", 0.0, 0.0, t_glueapd_tot_z);
+
 
 }
 
@@ -669,6 +890,14 @@ else if (type_detector == 2) {
 	TGeoBBox* revapd_shape_6 = new TGeoBBox("APDWS_6", alua_dx, alua_dy, alua_dz);
 
 }
+else if (type_detector == 3) {
+
+
+
+	TGeoBBox* revapd_shape_1 = new TGeoBBox("APDWS_1", alua_dx, alua_dy, alua_dz);
+
+
+}
 
 
 if (type_detector == 1) {
@@ -681,6 +910,12 @@ else if (type_detector == 2) {
 	TGeoCompositeShape* rev_shape = new TGeoCompositeShape("REV", "CRYSTALWS+APDWS_1:t1_1+APDWS_2:t1_2+APDWS_3:t1_3+APDWS_4:t1_4+APDWS_5:t1_5+APDWS_6:t1_6");
 
 }
+else if (type_detector == 3) {
+
+	TGeoCompositeShape* rev_shape = new TGeoCompositeShape("REV", "CRYSTALWS+APDWS_1:t1_1");
+
+}
+
 
 TGeoVolume* rev = new TGeoVolume("REV", rev_shape, aluminium);
 top->AddNode(rev, 1);
@@ -745,6 +980,13 @@ else if (type_detector == 2) {
 
 
 }
+else if (type_detector == 3) {
+
+	TGeoVolume* tot_1 = geom->MakeBox("TOT_1", totabsorbing, tot_dx, tot_dy, tot_dz);
+
+	rev->AddNode(tot_1, 1, t3_1);
+
+}
 
 
 //
@@ -796,20 +1038,46 @@ else if (type_detector == 2) {
 	TGeoVolume* apd_4 = geom->MakeBox("APD_4", silicium, apd_dx, apd_dy, apd_dz);
 	TGeoVolume* apd_5 = geom->MakeBox("APD_5", silicium, apd_dx, apd_dy, apd_dz);
 	TGeoVolume* apd_6 = geom->MakeBox("APD_6", silicium, apd_dx, apd_dy, apd_dz);
-	
+
 
 	tot_1->AddNode(apd_1, 1, t4_1);
 	tot_2->AddNode(apd_2, 1, t4_2);
 	tot_3->AddNode(apd_3, 1, t4_3);
-	
+
 	tot_4->AddNode(apd_4, 1, t4_4);
 	tot_5->AddNode(apd_5, 1, t4_5);
 	tot_6->AddNode(apd_6, 1, t4_6);
 
 
 }
+else if (type_detector == 3) {
+
+	TGeoVolume* apd_1 = geom->MakeBox("APD_1", silicium, apd_dx, apd_dy, apd_dz);
+
+	tot_1->AddNode(apd_1, 1, t4_1);
+
+}
 //  apd being a detector, booking of a TLitVolume is necessary. All characteristics of the
 // APD will then be given by a call to TLitVolume::SetAPD().
+
+char* name = "";
+
+int number_e = 0;
+if (type_refrec == 1) {
+
+	name = "GainProfile_CMSAPD_zero";
+	number_e = 3;
+}
+else if (type_refrec == 2) {
+
+	name = "GainProfile_CMSAPD_zero";
+	number_e = 0;
+}
+else if (type_refrec == 3) {
+
+	name = "GainProfile_CMSAPD_zero";
+	number_e = 0;
+}
 
 
 if (type_detector == 1) {
@@ -824,25 +1092,39 @@ if (type_detector == 1) {
 	TLitVolume* lit_apd_7 = new TLitVolume(apd_7);
 	TLitVolume* lit_apd_8 = new TLitVolume(apd_8);
 
-	lit_apd_1->SetAPD("GainProfile_CMSAPD", 3, 5);
-	lit_apd_2->SetAPD("GainProfile_CMSAPD", 3, 5);
-	lit_apd_3->SetAPD("GainProfile_CMSAPD", 3, 5);
-	lit_apd_4->SetAPD("GainProfile_CMSAPD", 3, 5);
 
-	lit_apd_5->SetAPD("GainProfile_CMSAPD", -3, 5);
-	lit_apd_6->SetAPD("GainProfile_CMSAPD", -3, 5);
-	lit_apd_7->SetAPD("GainProfile_CMSAPD", -3, 5);
-	lit_apd_8->SetAPD("GainProfile_CMSAPD", -3, 5);
 
-	//lit_apd_1->SetDetector("GainProfile_CMSAPD", 3, 5);
-	//lit_apd_2->SetDetector("GainProfile_CMSAPD", 3, 5);
-	//lit_apd_3->SetDetector("GainProfile_CMSAPD", 3, 5);
-	//lit_apd_4->SetDetector("GainProfile_CMSAPD", 3, 5);
 
-	//lit_apd_5->SetDetector("GainProfile_CMSAPD", -3, 5);
-	//lit_apd_6->SetDetector("GainProfile_CMSAPD", -3, 5);
-	//lit_apd_7->SetDetector("GainProfile_CMSAPD", -3, 5);
-	//lit_apd_8->SetDetector("GainProfile_CMSAPD", -3, 5);
+	lit_apd_1->SetAPD(name, 3, number_e);
+	lit_apd_2->SetAPD(name, 3, number_e);
+	lit_apd_3->SetAPD(name, 3, number_e);
+	lit_apd_4->SetAPD(name, 3, number_e);
+
+	lit_apd_5->SetAPD(name, -3, number_e);
+	lit_apd_6->SetAPD(name, -3, number_e);
+	lit_apd_7->SetAPD(name, -3, number_e);
+	lit_apd_8->SetAPD(name, -3, number_e);
+
+	//	lit_apd_1->SetDetector(kTRUE, "", 90.0, (0, 0, 1));
+	//	lit_apd_2->SetDetector(kTRUE, "", 90.0, (0, 0, 1));
+	//	lit_apd_3->SetDetector(kTRUE, "", 90.0, (0, 0, 1));
+	//	lit_apd_4->SetDetector(kTRUE, "", 90.0, (0, 0, 1));
+
+	//	lit_apd_5->SetDetector(kTRUE, "", 90.0, (0, 0, -1));
+	//	lit_apd_6->SetDetector(kTRUE, "", 90.0, (0, 0, -1));
+	//	lit_apd_7->SetDetector(kTRUE, "", 90.0, (0, 0, -1));
+	//	lit_apd_8->SetDetector(kTRUE, "", 90.0, (0, 0, -1));
+
+
+	//	lit_apd_1->SetSurfDet("APD_1", "APD_1", "", 1, 90.0, surfdet);
+	//	lit_apd_2->SetSurfDet("APD_2", "APD_2", "", 1, 90.0, surfdet);
+	//	lit_apd_3->SetSurfDet("APD_1", "APD_3", "", 1, 90.0, surfdet);
+	//	lit_apd_4->SetSurfDet("APD_4", "APD_4", "", 1, 90.0, surfdet);
+
+	//	lit_apd_5->SetSurfDet("APD_5", "APD_5", "", 1, 90.0, surfdet);
+	//	lit_apd_6->SetSurfDet("APD_6", "APD_6", "", 1, 90.0, surfdet);
+	//	lit_apd_7->SetSurfDet("APD_7", "APD_7", "", 1, 90.0, surfdet);
+	//	lit_apd_8->SetSurfDet("APD_8", "APD_8", "", 1, 90.0, surfdet);
 
 }
 else if (type_detector == 2) {
@@ -860,14 +1142,21 @@ else if (type_detector == 2) {
 	TLitVolume* lit_apd_6 = new TLitVolume(apd_6);
 
 
-	lit_apd_1->SetAPD("GainProfile_CMSAPD", 3, 5);
-	lit_apd_2->SetAPD("GainProfile_CMSAPD", 3, 5);
-	lit_apd_3->SetAPD("GainProfile_CMSAPD", 3, 5);
+	lit_apd_1->SetAPD(name, 3, number_e);
+	lit_apd_2->SetAPD(name, 3, number_e);
+	lit_apd_3->SetAPD(name, 3, number_e);
 
 
-	lit_apd_4->SetAPD("GainProfile_CMSAPD", -3, 5);
-	lit_apd_5->SetAPD("GainProfile_CMSAPD", -3, 5);
-	lit_apd_6->SetAPD("GainProfile_CMSAPD", -3, 5);
+	lit_apd_4->SetAPD(name, -3, number_e);
+	lit_apd_5->SetAPD(name, -3, number_e);
+	lit_apd_6->SetAPD(name, -3, number_e);
+
+}
+else if (type_detector == 3) {
+
+	TLitVolume* lit_apd_1 = new TLitVolume(apd_1);
+	lit_apd_1->SetAPD(name, 3, number_e);
+
 
 }
 
@@ -925,6 +1214,14 @@ else if (type_detector == 2) {
 	tot_6->AddNode(glueapd_6, 1, t5_6);
 
 }
+else if (type_detector == 3) {
+
+	TGeoVolume* glueapd_1 = geom->MakeBox("GlueAPD_1", glue, glueapd_dx, glueapd_dy, glueapd_dz);
+	tot_1->AddNode(glueapd_1, 1, t5_1);
+
+}
+
+
 
 
 //
@@ -1176,6 +1473,24 @@ else if (type_detector == 2) {
 
 
 }
+else if (type_detector == 3) {
+
+	tot_1->SetVisibility(kTRUE);
+	tot_1->SetLineColor(TotAbsColor);
+	tot_1->SetLineWidth(1);
+
+
+	apd_1->SetVisibility(kTRUE);
+	apd_1->SetLineColor(SiliciumColor);
+	apd_1->SetLineWidth(1);
+
+
+	glueapd_1->SetVisibility(kTRUE);
+	glueapd_1->SetLineColor(GlueColor);
+	glueapd_1->SetLineWidth(1);
+
+
+}
 
 crystal->SetVisibility(kTRUE);
 crystal->SetLineColor(CaWO4Color);
@@ -1285,7 +1600,7 @@ Double_t E_e = 0.545914; // МэВ
 Double_t p_e = pow(E_e * E_e - m_e * m_e, 1.0 / 2.0);
 
 Double_t m_mu = 105.658374524; // МэВ
-Double_t E_mu= 1000.0; // МэВ
+Double_t E_mu = 1000.0; // МэВ
 Double_t p_mu = pow(E_mu * E_mu - m_mu * m_mu, 1.0 / 2.0);
 
 p_e = E_e;
@@ -1314,7 +1629,7 @@ else {
 		//ok = lit_crystal->SetEmission(sinuscosinus, 5.0, emisdir, "", kFALSE, source, kTRUE, facedir);
 		ok = lit_crystal->SetEmission(sinuscosinus, 5.0, dir, "", kFALSE, 0.0, kFALSE);
 		gamma_rnd = new TLitSpontan("gammas_rnd", "Gamma Random", "/TOP_1/REV_1/CRYSTAL_1", wvlgth);
-		
+
 		//	gamma_rnd->TrackToDraw(1000000);
 		//	ok = kTRUE;
 		//	cout << gamma_rnd << endl;
@@ -1335,11 +1650,11 @@ else {
 		TVector3 facedir(0.0, 0.0, 1.0); // axis to follow to reach face of emission
 		TVector3 source(0.0, 0.0, 0.0);  // irrelevant
 		//ok = lit_crystal->SetEmission(sinuscosinus, 5.0, emisdir, "", kFALSE, source, kTRUE, facedir);
-		
+
 		//ok = lit_crystal->SetEmission(sinuscosinus, 180.0, dir, "", kFALSE, 0.0, kFALSE);
-		
+
 		ok = lit_crystal->SetEmission(on4pi, 180.0, dir, "", kFALSE, 0.0, kFALSE);
-		
+
 		gamma_rnd = new TLitSpontan("gammas_rnd", "Gamma Random", "/TOP_1/REV_1/CRYSTAL_1");
 		//	gamma_rnd->TrackToDraw(1000000);
 		//	ok = kTRUE;
@@ -1356,7 +1671,7 @@ else {
 
 		fix_point_x = 0.0;
 		fix_point_y = 0.0;
-		fix_point_z = 0.0;	
+		fix_point_z = 0.0;
 
 		TLitVolume* lit_crystal = new TLitVolume(crystal);
 		TVector3 emisdir(0.0, 0.0, 1.0); // axis around which photons are emitted
@@ -1364,11 +1679,11 @@ else {
 		TVector3 source(fix_point_x, fix_point_y, fix_point_z);  // irrelevant
 		//ok = lit_crystal->SetEmission(sinuscosinus, 5.0, emisdir, "", kFALSE, source, kTRUE, facedir);
 		//ok = lit_crystal->SetEmission(sinuscosinus, 30.0, dir, "", kTRUE, source, kFALSE);
-		
-		//ok = lit_crystal->SetEmission(sinuscosinus, 90.0, dir, "", kTRUE, source, kFALSE);
-		
+
+		//ok = lit_crystal->SetEmission(sinuscosinus, 180.0, dir, "", kTRUE, source, kFALSE);
+
 		ok = lit_crystal->SetEmission(on4pi, 180.0, dir, "", kTRUE, source, kFALSE);
-		
+
 		gamma_rnd = new TLitSpontan("gammas_rnd", "Gamma Random", "/TOP_1/REV_1/CRYSTAL_1");
 
 		//nrun = 11;
@@ -1383,7 +1698,7 @@ else {
 
 		fix_point_x = 0.0;
 		fix_point_y = 0.0;
-		
+
 
 		fix_point_z = startz;
 		//	fix_point_z = -7.99;
@@ -1393,7 +1708,7 @@ else {
 		TVector3 source(0.0, 0.0, 0.0);  // irrelevant
 		//ok = lit_crystal->SetEmission(sinuscosinus, 5.0, emisdir, "", kFALSE, source, kTRUE, facedir);
 		//ok = lit_crystal->SetEmission(sinuscosinus, 30.0, dir, "", kTRUE, source, kFALSE);
-		
+
 		ok = lit_cradle->SetEmission();
 
 		//ok = lit_crystal->SetEmission(sinuscosinus, 5.0, emisdir, "", kFALSE, source, kTRUE, facedir);
@@ -1404,8 +1719,8 @@ else {
 
 		//ok = lit_cradle->SetEmission(sinuscosinus, 180.0, emisdir, "", kFALSE, source, kFALSE);
 
-	    //ok = lit_cradle->SetEmission(on4pi, 180.0, emisdir, "", kFALSE, source, kFALSE);
-		
+		//ok = lit_cradle->SetEmission(on4pi, 180.0, emisdir, "", kFALSE, source, kFALSE);
+
 		//ok = kTRUE;
 
 		gamma_rnd = new TLitSpontan("gammas_rnd", "Gamma Random", "/TOP_1/REV_1/CRYSTAL_1/CRADLE_1", kTRUE, kFALSE);
@@ -1452,7 +1767,7 @@ else {
 		TLitBeam* beam = new TLitBeam("electrons", "beam of electrons", "/TOP_1/BEAMCRADLE_1", particle, kTRUE, kFALSE);
 		ok = beam->SetEmission(sinuscosinus, 30.0, dir, "", kFALSE, 0.0, kTRUE, dirfce);
 
-		
+
 
 	}
 
@@ -1463,7 +1778,7 @@ else {
 		TLitBeam* beam = new TLitBeam("electrons", "beam of electrons", "/TOP_1/BEAMCRADLE_1", particle, kTRUE, kFALSE);
 		ok = beam->SetEmission(sinuscosinus, 30.0, dir, "", kFALSE, 0.0, kTRUE, dirfce);
 
-		
+
 	}
 	else if (k == 10) {
 
@@ -1529,9 +1844,9 @@ else if (k == 4) {
 
 
 	//gamma_rnd->TrackToDraw(4);
-	
-		gamma_rnd->Gen(1, 10*nbphot);
-		
+
+	gamma_rnd->Gen(1, 10.0 * nbphot);
+
 
 
 
@@ -1539,27 +1854,27 @@ else if (k == 4) {
 else if (k == 5) {
 	//gamma_rnd->TrackToDraw(4);
 
-	
-		
-		gamma_rnd->Gen(1, 10*nbphot);
-		
+
+
+	gamma_rnd->Gen(1, 10.0 * nbphot);
+
 
 }
 else if (k == 6) {
 	//gamma_rnd->TrackToDraw(4);
 
-	
+
 	for (krun = 1; krun <= nrun; krun++) {
-		
-		
-		gamma_rnd->Gen(krun, 5*nbphot, startz);
+
+
+		gamma_rnd->Gen(krun, 5.0 * nbphot, startz);
 		startz += stepz;
 		fix_point_z = startz;
 		//wvlgth += step;
 		//gamma_rnd->SetWvlgth(wvlgth);
 
 		if (krun != nrun) {
-			
+
 			t6_in->SetTranslation(fix_point_x, fix_point_y, fix_point_z);
 			gamma_rnd->MoveCradle(t6_in, kTRUE);
 		}
@@ -1604,7 +1919,7 @@ else if (k == 8) {
 
 }
 else if (k == 9) {
-	
+
 	Double_t xyz[3];
 	xyz[0] = fix_point_x;
 	xyz[1] = starty;
@@ -1612,41 +1927,41 @@ else if (k == 9) {
 	ph6->SetTranslation(xyz);
 	beam->MoveCradle(ph6, kTRUE);
 	beam->Gen(1, nbbeam);
-	
+
 
 }
 else if (k == 10) {
 
-Double_t xyz[3];
-xyz[0] = 0.0;
-xyz[1] = starty-1.5;					 // перемещаем ее чуть ниже другой каретки, чтобы они не пересеклись при движении
-xyz[2] = startz;
-ph6_vacuum->SetTranslation(xyz);
-beam->MoveCradle(ph6_vacuum, kTRUE);
+	Double_t xyz[3];
+	xyz[0] = 0.0;
+	xyz[1] = starty - 1.5;					 // перемещаем ее чуть ниже другой каретки, чтобы они не пересеклись при движении
+	xyz[2] = startz;
+	ph6_vacuum->SetTranslation(xyz);
+	beam->MoveCradle(ph6_vacuum, kTRUE);
 
-for (krun = 1; krun <= nrun; krun++) {
-	beam->Gen(krun, nbbeam, startz);
-	startz += stepz;
-	if (krun != nrun) {
-		xyz[2] = startz;
-		ph6_vacuum->SetTranslation(xyz);
-		beam->MoveCradle(ph6_vacuum, kTRUE);
+	for (krun = 1; krun <= nrun; krun++) {
+		beam->Gen(krun, nbbeam, startz);
+		startz += stepz;
+		if (krun != nrun) {
+			xyz[2] = startz;
+			ph6_vacuum->SetTranslation(xyz);
+			beam->MoveCradle(ph6_vacuum, kTRUE);
+		}
 	}
-}
 
 
-gLitGp->SetTitle("position z along crystal axis");
+	gLitGp->SetTitle("position z along crystal axis");
 
 }
 else if (k == 11) {
 
-Double_t xyz[3];
-xyz[0] = fix_point_x;
-xyz[1] = starty-1.5;
-xyz[2] = fix_point_z;
-ph6_vacuum->SetTranslation(xyz);
-beam->MoveCradle(ph6_vacuum, kTRUE);
-beam->Gen(1, nbbeam);
+	Double_t xyz[3];
+	xyz[0] = fix_point_x;
+	xyz[1] = starty - 1.5;
+	xyz[2] = fix_point_z;
+	ph6_vacuum->SetTranslation(xyz);
+	beam->MoveCradle(ph6_vacuum, kTRUE);
+	beam->Gen(1, nbbeam);
 
 
 }
